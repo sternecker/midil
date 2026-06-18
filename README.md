@@ -1,9 +1,10 @@
 # midil
 Memory Injection Detection in Linux
 
-A read-only triage scanner. For every running process it flags:
-**False positives are expected**
+A read-only triage scanner. 
+**False positives are expected**  
 
+For every running process it flags:  
 | Tag | Indicator | Why it matters |
 |-----|-----------|----------------|
 | `RWX` | writable **and** executable mapping | classic injection / unsafe JIT (W^X violation) |
