@@ -103,8 +103,13 @@ for procdir in /proc/[0-9]*; do
     while IFS= read -r line || [ -n "$line" ]; do
         perms=${line#* }; perms=${perms%% *}                 # 2nd field
         [ "${perms:2:1}" = "x" ] || continue                 # only executable VMAs matter
-        path=${line#*[0-9a-f] }                              # crude; refine below
-        path=$(echo "$line" | awk '{ if (NF>=6){ $1=$2=$3=$4=$5=""; sub(/^ +/,""); print } else print "" }')
+        # pathname = everything after the 5th field (inode), captured verbatim so paths
+        # containing spaces (e.g. an attacker-named file) are not normalized/collapsed.
+        if [[ $line =~ ^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+(.*)$ ]]; then
+            path=${BASH_REMATCH[1]}
+        else
+            path=""                                          # anonymous mapping (no pathname)
+        fi
         w=${perms:1:1}
 
         case "$path" in
@@ -118,6 +123,9 @@ for procdir in /proc/[0-9]*; do
         fi
 
         case "$path" in
+            # memfd mappings always carry a trailing "(deleted)", so this must be tested
+            # BEFORE the generic *"(deleted)" arm or it would never match.
+            "/memfd:"*|*"/memfd:"*) hits+=("MEMFD-X $perms  $path") ;;
             *"(deleted)")
                 case "$path" in
                     /usr/lib/*|/lib/*|/usr/lib64/*|/lib64/*|/usr/local/lib/*|/usr/lib32/*)
@@ -125,7 +133,6 @@ for procdir in /proc/[0-9]*; do
                         hits+=("DEL-X   $perms  $path  ${DIM}(post-upgrade; restart proc — needrestart)${RST}") ;;
                     *)  hits+=("DEL-X   $perms  $path  ← ${RED}deleted from NON-standard path (evasion signal)${RST}") ;;
                 esac ;;
-            "/memfd:"*|*"/memfd:"*) hits+=("MEMFD-X $perms  $path") ;;
             /tmp/*|/dev/shm/*|/run/shm/*|"$HOME"/*) hits+=("TMP-X   $perms  $path") ;;
             "[stack]")           hits+=("XSTACK  $perms  executable stack") ;;
             "[heap]")            hits+=("XHEAP   $perms  executable heap") ;;
