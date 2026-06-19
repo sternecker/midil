@@ -116,7 +116,11 @@ for procdir in /proc/[0-9]*; do
             "[vdso]"|"[vsyscall]"|"[vvar]"|"[uprobes]") continue ;;  # legit kernel-provided exec pages
         esac
 
-        if [ "$w" = "w" ]; then
+        # [stack]/[heap] are always writable, so an executable one is always rwx — it
+        # would double-report as both RWX and XSTACK/XHEAP below. Suppress the RWX line
+        # for them; the dedicated XSTACK/XHEAP tag already carries the W^X finding.
+        case "$path" in "[stack]"|"[heap]") sh=1 ;; *) sh=0 ;; esac
+        if [ "$w" = "w" ] && [ "$sh" = 0 ]; then
             hits+=("RWX     $perms  ${path:-<anonymous>}")
         elif [ -z "$path" ]; then
             hits+=("ANON-X  $perms  <anonymous executable mapping>")
