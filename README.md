@@ -16,6 +16,7 @@ For every running process it flags:
 | `XHEAP` | executable `[heap]` | JIT-spray landing pad |
 | `TRACED` | `TracerPid != 0` | something is ptrace-attached to it right now |
 | `LDPRE` | `LD_PRELOAD` set in the process environment | library injection |
+| `EXE-TMP` | `/proc/<pid>/exe` binary image resolves under `/tmp`, `/dev/shm`, `/run/shm`, or `$HOME` | drop-and-exec (the binary itself, not just a mapping) |
 
 **Run as root** for full coverage (otherwise limited to your own processes). It prints the owning
 UID and stars processes running as root, so you immediately see injection *into elevated* targets.
@@ -26,3 +27,12 @@ those findings as informational rather than alerts. Tune the allowlist per your 
 red is worth investigating. The real value is the **inventory**: after a clean run you know exactly
 which processes legitimately use RWX/JIT memory — that is the W^X attack surface to harden or
 sandbox first.
+
+## Limitations
+
+midil is a **read-only, point-in-time** triage of executable-memory provenance. Several important
+attack techniques — code reuse (ret2libc/ROP), W→X page flips, transient/self-repairing payloads,
+pointer-redirection, and kernel-mode compromise — produce **no anomalous mapping for it to see**.
+A clean run means *"no userland-injected executable memory was resident at snapshot time,"* **not**
+*"this host is uncompromised."* 
+

@@ -99,6 +99,28 @@ for procdir in /proc/[0-9]*; do
         [ -n "$pre" ] && hits+=("LDPRE   $pre")
     fi
 
+    # ── executable image identity (psaux-style cross-check, AoMF Ch.21)
+    # /proc/<pid>/exe is the kernel's authoritative pointer to the running binary; an image running
+    # from a writable/world-accessible dir is a drop-and-exec tell (this is the canonical
+    # argv[0]="apache2" backed by /tmp/x case). Overlaps the TMP-X mapping line by design — EXE-TMP
+    # is the authoritative /proc/exe identity and fires even when no separate suspicious VMA exists.
+    # Kernel threads have no exe (readlink fails) and are skipped.
+    #
+    # A name-vs-path *verdict* (comm/argv[0] vs the on-disk binary) deliberately lives in
+    # triage-pid.sh, not here: at sweep altitude it is anti-correlated with the threat — the kernel
+    # seeds comm from the exec'd basename, so it stays silent on a real rename yet fires on every
+    # legitimate multi-call/symlinked binary (gjs→gjs-console, pipewire-pulse, podman self-reexec
+    # as comm="exe"). The deep dive can afford a per-pid dpkg-ownership cross-check; the sweep can't.
+    # The one precise rename signal worth a sweep tag — masquerading as a [kworker] kernel thread —
+    # is scoped separately as backlog A3.
+    if exe=$(readlink "$procdir/exe" 2>/dev/null) && [ -n "$exe" ]; then
+        exe_clean=${exe% (deleted)}                       # a dropped binary unlinked after exec
+        case "$exe_clean" in
+            /tmp/*|/dev/shm/*|/run/shm/*|"$HOME"/*)
+                hits+=("EXE-TMP $exe_clean  ← binary image is in a writable dir") ;;
+        esac
+    fi
+
     # ── memory mappings
     while IFS= read -r line || [ -n "$line" ]; do
         perms=${line#* }; perms=${perms%% *}                 # 2nd field
